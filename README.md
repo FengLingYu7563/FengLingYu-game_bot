@@ -1,2 +1,5 @@
-﻿# FengLingYu-game_bot
+﻿# discord bot
+ - game info search(toram)
+ - chat
+
 
