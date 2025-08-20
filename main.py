@@ -2,8 +2,7 @@ import discord
 from discord.ext import commands
 import os
 import flask
-from threading import Thread
-import asyncio
+import threading
 from dotenv import load_dotenv
 
 # 你的其他模組
@@ -24,6 +23,8 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # 這接收 HTTP 請求
 app = flask.Flask(__name__)
 
+setup_gemini_api(bot, gemini_api_key)
+
 # 將 bot.run() 放在一個單獨的函式中
 def run_discord_bot():
     try:
@@ -32,14 +33,10 @@ def run_discord_bot():
     except Exception as e:
         print(f"❌ 機器人運行失敗: {e}")
 
-# 在 Flask 應用啟動前，啟動 bot
-@app.before_first_request
-def start_bot_in_background():
-    # 啟動一個新執行緒來運行 bot.run()，以免阻塞 Web 伺服器
-    Thread(target=run_discord_bot).start()
+# 在單獨的執行緒中啟動 bot
+bot_thread = threading.Thread(target=run_discord_bot)
+bot_thread.daemon = True
 
-    # 在這裡設定 Gemini API
-    setup_gemini_api(bot, gemini_api_key)
 
 @bot.event
 async def on_ready():
