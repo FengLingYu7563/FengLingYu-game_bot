@@ -1,0 +1,1 @@
+from .boss import info_group
