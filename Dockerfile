@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 定義容器啟動時的命令
-CMD ["python", "main.py"]
+CMD gunicorn --bind :$PORT main:app

@@ -61,6 +61,6 @@ def health_check():
     # 這個端點可以用來做健康檢查，確保服務正在運行
     return flask.jsonify({"status": "healthy"}), 200
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+# if __name__ == "__main__":
+#    port = int(os.environ.get("PORT", 8080))
+#    app.run(host="0.0.0.0", port=port)
