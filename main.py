@@ -4,9 +4,10 @@ import os
 import flask
 import threading
 
-# 你的其他模組
+# 其他模組
 from slash.info import info_group
 from chat.gemini_api import setup_gemini_api
+from database import get_user_profile, update_user_profile
 
 # 使用你的變數名稱從環境變數中讀取金鑰
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
@@ -44,6 +45,38 @@ def health_check():
     # 這個端點可以用來做健康檢查，確保服務正在運行
     return flask.jsonify({"status": "healthy"}), 200
 
+###  測試 ###
+
+# 傳統指令
+@bot.command(name="set_role")
+async def set_role_legacy(ctx, *, new_role):
+    """設定你在機器人這裡扮演的角色"""
+    try:
+        user_id = ctx.author.id
+        current_profile = get_user_profile(user_id)
+        current_profile['current_role'] = new_role
+        update_user_profile(user_id, current_profile)
+        await ctx.send(f"✅ 你的角色已成功設定為：{new_role}")
+    except Exception as e:
+        await ctx.send(f"❌ 發生錯誤: {e}")
+        print(f"傳統指令 set_role 執行失敗: {e}")
+
+# 斜線指令
+@bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
+@app_commands.describe(new_role="輸入你想要設定的角色")
+async def slash_set_role(interaction: discord.Interaction, new_role: str):
+    """設定你在機器人這裡扮演的角色"""
+    try:
+        user_id = interaction.user.id
+        current_profile = get_user_profile(user_id)
+        current_profile['current_role'] = new_role
+        update_user_profile(user_id, current_profile)
+        await interaction.response.send_message(f"✅ 你的角色已成功設定為：{new_role}")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ 發生錯誤: {e}")
+        print(f"斜線指令 set_role 執行失敗: {e}")
+        
+############
 @bot.event
 async def on_ready():
     """當機器人啟動時，同步斜線指令"""

@@ -20,14 +20,15 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
     
     try:
         genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            model_name="gemini-2.5-flash",
+            system_instruction=my_system_instruction
+        )
+        print("✅ Gemini API 已成功配置")
     except Exception as e:
         print(f"錯誤：無法配置 Gemini API。檢查 API 金鑰。詳細錯誤：{e}")
+        model = None
         return
-
-    model = genai.GenerativeModel(
-        model_name = "gemini-2.5-flash",
-        system_instruction = my_system_instruction
-    )
 
     # 註冊 on_message 事件處理器，讓機器人能夠接收訊息
     @bot.event
@@ -41,8 +42,13 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
         is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
 
         if not is_mentioned and not is_reply_to_bot:
+            await bot.process_commands(message)
             return
 
+        if model is None:
+            await message.channel.send("model is None，我目前無法連線到 Gemini API。")
+            return
+        
         # 移除標註標籤，取得純粹的提問內容
         user_input = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
@@ -56,7 +62,7 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
                 full_response = ""
                 for chunk in model.generate_content(
                     user_input,
-                    stream=True,
+                    # stream=True,
                     generation_config=genai.types.GenerationConfig(
                         temperature=1
                     )
@@ -66,3 +72,5 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
                 await message.channel.send(full_response)
         except Exception as e:
             await message.channel.send(f"處理請求時發生了錯誤：{e}")
+
+        await bot.process_commands(message)
