@@ -16,6 +16,7 @@ if not bot_token or not gemini_api_key:
     raise Exception("找不到必要的環境變數")
 
 intents = discord.Intents.default()
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 這接收 HTTP 請求
