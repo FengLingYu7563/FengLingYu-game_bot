@@ -11,6 +11,8 @@ cache_lock = threading.Lock()
 def initialize_database():
     """初始化 Firebase Admin SDK"""
     global db
+    if firebase_admin._apps:  # 檢查是否已初始化，避免重複
+        return
     cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
     if cred_json_str:
         try:
@@ -21,9 +23,11 @@ def initialize_database():
             print("✅ Firebase 已成功初始化")
         except Exception as e:
             print(f"❌ Firebase 初始化失敗: {e}")
-            raise Exception("Firebase 初始化失敗")
+            # 這裡不raise exception，讓程式繼續，但db為None
+            db = None
     else:
-        raise Exception("找不到 Firebase 服務帳戶金鑰")
+        print("❌ 找不到 FIREBASE_ADMIN_CREDENTIALS 環境變數")
+        db = None
 
 def get_user_profile(user_id):
     """從 Firestore 或快取中獲取使用者資料"""

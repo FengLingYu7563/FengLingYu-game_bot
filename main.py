@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import os
 import flask
-import asyncio
+import threading
 
 # 匯入您的其他模組
 from slash.info import info_group
@@ -56,16 +56,18 @@ async def slash_set_role(interaction: discord.Interaction, new_role: str):
         await interaction.response.send_message(f"❌ 發生錯誤: {e}")
         print(f"斜線指令 set_role 執行失敗: {e}")
 
-# 健康檢查路由
-@app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET"])
 def health_check():
+    """健康檢查端點"""
     return flask.jsonify({"status": "healthy"}), 200
 
 # 這是讓機器人運作的關鍵
-@app.route("/start_bot")
+@app.before_serving
 def start_bot():
-    asyncio.run(bot.start(bot_token))
-    return "Bot started", 200
+    def run_bot():
+        bot.run(bot_token)
+    
+    threading.Thread(target=run_bot).start()
 
 @bot.event
 async def on_ready():
