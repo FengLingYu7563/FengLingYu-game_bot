@@ -1,19 +1,14 @@
-# main.py
 import discord
 from discord.ext import commands
 from discord import app_commands
 import os
 import flask
-import threading
-import json
-import firebase_admin
-from firebase_admin import credentials, firestore
-import google.generativeai as genai # type: ignore
+import asyncio
 
 # 匯入您的其他模組
 from slash.info import info_group
 from chat.gemini_api import setup_gemini_api
-from database import get_user_profile, update_user_profile
+from database import get_user_profile, update_user_profile, initialize_database
 
 # 使用你的變數名稱從環境變數中讀取金鑰
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
@@ -21,6 +16,9 @@ gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not bot_token or not gemini_api_key:
     raise Exception("找不到必要的環境變數")
+
+# 在這裡呼叫初始化函式
+initialize_database()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -58,22 +56,16 @@ async def slash_set_role(interaction: discord.Interaction, new_role: str):
         await interaction.response.send_message(f"❌ 發生錯誤: {e}")
         print(f"斜線指令 set_role 執行失敗: {e}")
 
+# 健康檢查路由
 @app.route("/", methods=["GET", "POST"])
 def health_check():
     return flask.jsonify({"status": "healthy"}), 200
 
 # 這是讓機器人運作的關鍵
-@app.route("/start_bot", methods=["POST"])
-async def start_bot_endpoint():
-    if not bot.is_ready():
-        print("🤖 正在從 /start_bot 端點啟動機器人...")
-        try:
-            await bot.start(bot_token)
-            return "Bot started", 200
-        except Exception as e:
-            return f"Error starting bot: {e}", 500
-    else:
-        return "Bot is already running", 200
+@app.route("/start_bot")
+def start_bot():
+    asyncio.run(bot.start(bot_token))
+    return "Bot started", 200
 
 @bot.event
 async def on_ready():
@@ -85,11 +77,4 @@ async def on_ready():
     except Exception as e:
         print(f"❌ 同步斜線指令失敗: {e}")
 
-# 直接在這裡啟動機器人，而不是在一個單獨的執行緒中
-# bot.run() 是阻塞的，所以我們使用 bot.start() 和 aiohttp
-# 在 Cloud Run 環境中，我們將使用 Gunicorn 來管理這個
-if __name__ == "__main__":
-    # 在本地測試時，您可以使用這段程式碼
-    # app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-    # bot.run(bot_token)
-    pass
+# Cloud Run 會自動執行這個檔案並啟動 app，所以我們不需要自己呼叫 app.run()

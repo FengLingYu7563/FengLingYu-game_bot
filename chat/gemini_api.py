@@ -30,14 +30,11 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
         model = None
         return
 
-    # 註冊 on_message 事件處理器，讓機器人能夠接收訊息
     @bot.event
     async def on_message(message):
-        # 忽略機器人自己的訊息
         if message.author == bot.user:
             return
 
-        # 檢查訊息是否為機器人的標註或回覆
         is_mentioned = bot.user.mentioned_in(message)
         is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
 
@@ -46,31 +43,27 @@ def setup_gemini_api(bot: commands.Bot, api_key: str):
             return
 
         if model is None:
-            await message.channel.send("model is None，我目前無法連線到 Gemini API。")
+            await message.channel.send("抱歉，我目前無法連線到 Gemini API。")
             return
-        
-        # 移除標註標籤，取得純粹的提問內容
+
         user_input = message.content.replace(f'<@{bot.user.id}>', '').strip()
 
-        # prompt_filter
         if not user_input or any(keyword in user_input for keyword in prompt_injection_keywords):
-        # 建立一個提示詞，引導 AI 裝傻
             user_input = "使用者沒有輸入"
             
         try:
             async with message.channel.typing():
-                full_response = ""
-                for chunk in model.generate_content(
+                response = model.generate_content(
                     user_input,
-                    # stream=True,
+                    stream=False,
                     generation_config=genai.types.GenerationConfig(
                         temperature=1
                     )
-                ):
-                    full_response += chunk.text
-                
-                await message.channel.send(full_response)
+                )
+                full_response = response.text
+            
+            await message.channel.send(full_response)
         except Exception as e:
             await message.channel.send(f"處理請求時發生了錯誤：{e}")
-
+        
         await bot.process_commands(message)
