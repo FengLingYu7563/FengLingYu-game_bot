@@ -1,17 +1,18 @@
-# 使用官方 Python 映像檔作為基礎
+# 使用官方 Python 3.11 作為基礎映像
 FROM python:3.11-slim
 
 # 設定工作目錄
 WORKDIR /app
 
-# 將你的 requirements.txt 複製到容器中
+# 將 requirements.txt 複製到工作目錄
 COPY requirements.txt .
 
-# 安裝所有 Python 函式庫
+# 安裝所有依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 將你的所有程式碼檔案複製到容器中
+# 將專案所有檔案複製到工作目錄
 COPY . .
 
-# 定義容器啟動時的命令
-CMD gunicorn --bind :$PORT main:app
+# 定義 Flask 應用程式的啟動命令
+# 這裡使用 gunicorn 啟動 Flask app
+CMD exec gunicorn --bind :$PORT --workers 1 main:app
