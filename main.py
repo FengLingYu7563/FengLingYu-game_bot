@@ -29,32 +29,46 @@ app = flask.Flask(__name__)
 
 setup_gemini_api(bot, gemini_api_key)
 
-# 傳統指令
-@bot.command(name="set_role")
-async def set_role_legacy(ctx, *, new_role):
+# 協助處理設定角色和回應的輔助函式
+# 這個函式將重複的邏輯集中在一個地方
+async def _update_role_and_respond(user_id, new_role, responder):
+    """
+    Update the user's role and send a response.
+
+    Args:
+        user_id (int): The ID of the user.
+        new_role (str): The new role to set.
+        responder: The object to send the response (ctx or interaction).
+    """
     try:
-        user_id = ctx.author.id
         current_profile = get_user_profile(user_id)
         current_profile['current_role'] = new_role
         update_user_profile(user_id, current_profile)
-        await ctx.send(f"✅ 你的角色已成功設定為：{new_role}")
+        message = f"✅ 你的角色已成功設定為：{new_role}"
+        if isinstance(responder, commands.Context):
+            await responder.send(message)
+        else: # discord.Interaction
+            await responder.response.send_message(message)
     except Exception as e:
-        await ctx.send(f"❌ 發生錯誤: {e}")
-        print(f"傳統指令 set_role 執行失敗: {e}")
+        message = f"❌ 發生錯誤: {e}"
+        if isinstance(responder, commands.Context):
+            await responder.send(message)
+        else: # discord.Interaction
+            await responder.response.send_message(message)
+        print(f"指令 set_role 執行失敗: {e}")
+
+# 傳統指令
+@bot.command(name="set_role")
+async def set_role_legacy(ctx, *, new_role):
+    # 調用輔助函式來處理核心邏輯
+    await _update_role_and_respond(ctx.author.id, new_role, ctx)
 
 # 斜線指令
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
-    try:
-        user_id = interaction.user.id
-        current_profile = get_user_profile(user_id)
-        current_profile['current_role'] = new_role
-        update_user_profile(user_id, current_profile)
-        await interaction.response.send_message(f"✅ 你的角色已成功設定為：{new_role}")
-    except Exception as e:
-        await interaction.response.send_message(f"❌ 發生錯誤: {e}")
-        print(f"斜線指令 set_role 執行失敗: {e}")
+    # 調用輔助函式來處理核心邏輯
+    await _update_role_and_respond(interaction.user.id, new_role, interaction)
 
 @app.route("/", methods=["GET"])
 def health_check():
@@ -78,5 +92,3 @@ async def on_ready():
         print(f"✅ 載入 {len(slash)} 個斜線指令")
     except Exception as e:
         print(f"❌ 同步斜線指令失敗: {e}")
-
-# Cloud Run 會自動執行這個檔案並啟動 app，所以我們不需要自己呼叫 app.run()
