@@ -4,12 +4,89 @@ from discord import app_commands
 import os
 import flask
 import threading
+import json
+import firebase_admin
+from firebase_admin import credentials, firestore
 
-# 匯入你的其他模組
-from slash.info import info_group
-from chat.gemini_api import setup_gemini_api
-from database import get_user_profile, update_user_profile, initialize_database # 新增 initialize_database
+# --- 全局變數 ---
+db = None
+user_cache = {}
+cache_lock = threading.Lock()
 
+# --- 資料庫初始化函式 ---
+def initialize_database():
+    """初始化 Firebase 和 Firestore 連線"""
+    global db
+    if firebase_admin._apps:
+        # 如果 Firebase 已經初始化過，就跳過
+        return
+
+    try:
+        cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
+        if cred_json_str:
+            print("偵測到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
+            cred_obj = json.loads(cred_json_str)
+            cred = credentials.Certificate(cred_obj)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
+        else:
+            # 這是備用方案，在 Cloud Run 上應該會自動使用憑證
+            print("未找到 FIREBASE_ADMIN_CREDENTIALS，嘗試使用 ApplicationDefault。")
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase 已成功初始化 (模式: 應用預設憑證)")
+
+        db = firestore.client()
+        print("✅ Firestore 客戶端已成功建立。")
+    except Exception as e:
+        print(f"❌ Firebase 初始化失敗: {e}")
+        db = None
+        raise e # 拋出錯誤讓主程式知道初始化失敗
+
+def get_user_profile(user_id):
+    """從 Firestore 或快取中獲取使用者資料"""
+    if db is None:
+        raise Exception("資料庫未初始化，無法執行 get_user_profile。")
+
+    with cache_lock:
+        if user_id in user_cache:
+            return user_cache[user_id]
+            
+    doc_ref = db.collection('user_profiles').document(str(user_id))
+    try:
+        doc = doc_ref.get()
+        if doc.exists:
+            profile = doc.to_dict()
+            with cache_lock:
+                user_cache[user_id] = profile
+            return profile
+        else:
+            return {
+                "current_role": "冒險者",
+                "discord_id": str(user_id),
+                "gpt_notes": "",
+                "keywords": []
+            }
+    except Exception as e:
+        print(f"❌ 從 Firestore 讀取使用者 {user_id} 資料失敗: {e}")
+        raise e
+
+def update_user_profile(user_id, profile_data):
+    """更新 Firestore 中的使用者資料，並同步更新快取"""
+    if db is None:
+        raise Exception("資料庫未初始化，無法執行 update_user_profile。")
+
+    doc_ref = db.collection('user_profiles').document(str(user_id))
+    try:
+        doc_ref.set(profile_data, merge=True)
+        with cache_lock:
+            user_cache[user_id] = profile_data
+        print(f"✅ 使用者 {user_id} 的資料已更新")
+    except Exception as e:
+        print(f"❌ 更新 Firestore 使用者 {user_id} 資料失敗: {e}")
+        raise e
+
+# --- Discord 和 Gemini API 初始化 ---
 # 從環境變數中讀取金鑰
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
 gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -24,7 +101,11 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 app = flask.Flask(__name__)
 
-# ===== 傳統指令定義 =====
+# 匯入其他模組
+from slash.info import info_group
+from chat.gemini_api import setup_gemini_api
+
+# --- 指令定義 ---
 @bot.command(name="set_role")
 async def set_role_legacy(ctx: commands.Context, *, new_role: str):
     try:
@@ -37,7 +118,6 @@ async def set_role_legacy(ctx: commands.Context, *, new_role: str):
         await ctx.send(f"❌ 發生錯誤: {e}")
         print(f"傳統指令 set_role 執行失敗: {e}")
 
-# ===== 斜線指令定義 =====
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
@@ -51,11 +131,10 @@ async def slash_set_role(interaction: discord.Interaction, new_role: str):
         await interaction.response.send_message(f"❌ 發生錯誤: {e}")
         print(f"斜線指令 set_role 執行失敗: {e}")
 
-# 將 info_group 添加到 bot.tree
 bot.tree.add_command(info_group)
 
 
-# ===== 服務啟動邏輯 =====
+# --- 服務啟動邏輯 ---
 def run_bot():
     """在一個獨立的執行緒中運行機器人"""
     try:
@@ -69,7 +148,7 @@ def health_check():
     return flask.jsonify({"status": "healthy"}), 200
 
 def main():
-    # 在主函式中明確地呼叫初始化函式
+    # 設置 Gemini API 和資料庫
     try:
         initialize_database()
         setup_gemini_api(bot, gemini_api_key)
