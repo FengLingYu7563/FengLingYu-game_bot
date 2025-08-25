@@ -1,7 +1,7 @@
-discord.py>=2.3.2
+discord.py
 google-generativeai
 pandas
-flask>=3.0.0
+flask
 gunicorn
 python-dotenv
 firebase-admin
