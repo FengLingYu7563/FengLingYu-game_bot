@@ -11,25 +11,36 @@ cache_lock = threading.Lock()
 def initialize_database():
     global db
     if firebase_admin._apps:
+        print("警告: Firebase 已初始化，跳過重新初始化。")
         return
     
     try:
+        # 嘗試從環境變數 FIREBASE_ADMIN_CREDENTIALS 載入憑證 (用於本地測試或特定部署)
         cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
         
         if cred_json_str:
-            print("找到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
+            print("偵測到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
             cred_obj = json.loads(cred_json_str)
             cred = credentials.Certificate(cred_obj)
             firebase_admin.initialize_app(cred)
-            print("✅ Firebase 已成功初始化 (使用服務帳號憑證)")
+            print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
         else:
+            # 如果沒有找到，則嘗試使用 Cloud Run 預設的 ApplicationDefault 憑證
             print("未找到 FIREBASE_ADMIN_CREDENTIALS，嘗試使用 ApplicationDefault。")
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred)
-            print("✅ Firebase 已成功初始化 (使用應用預設憑證)")
+            print("✅ Firebase 已成功初始化 (模式: 應用預設憑證)")
 
+        # 嘗試建立 Firestore 客戶端
         db = firestore.client()
-        print("✅ Firestore 客戶端已成功建立。")
+        # 進行一次測試讀取，以確保連線成功
+        try:
+            db.collection("test_connection").document("test_doc").get()
+            print("✅ Firestore 客戶端已成功建立並通過連線測試。")
+        except Exception as conn_e:
+            print(f"❌ Firestore 客戶端連線測試失敗: {conn_e}")
+            db = None
+            
     except Exception as e:
         print(f"❌ Firebase 初始化失敗: {e}")
         db = None
