@@ -8,7 +8,7 @@ import threading
 # 匯入你的其他模組
 from slash.info import info_group
 from chat.gemini_api import setup_gemini_api
-from database import get_user_profile, update_user_profile
+from database import get_user_profile, update_user_profile, initialize_database # 新增 initialize_database
 
 # 從環境變數中讀取金鑰
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
@@ -69,8 +69,14 @@ def health_check():
     return flask.jsonify({"status": "healthy"}), 200
 
 def main():
-    # 設置 Gemini API
-    setup_gemini_api(bot, gemini_api_key)
+    # 在主函式中明確地呼叫初始化函式
+    try:
+        initialize_database()
+        setup_gemini_api(bot, gemini_api_key)
+        print("✅ 所有服務初始化完成")
+    except Exception as e:
+        print(f"初始化服務失敗: {e}")
+        return
     
     # 在一個獨立的執行緒中運行機器人
     bot_thread = threading.Thread(target=run_bot, daemon=True)

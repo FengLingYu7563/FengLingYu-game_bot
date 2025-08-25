@@ -8,22 +8,33 @@ db = None
 user_cache = {}
 cache_lock = threading.Lock()
 
-# 這裡我們將初始化邏輯放在頂層，以確保它在任何函式被呼叫前執行
-cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
-if cred_json_str:
+def initialize_database():
+    global db
+    if firebase_admin._apps:
+        print("警告: Firebase 已初始化，跳過重新初始化。")
+        return
+    
     try:
-        cred_obj = json.loads(cred_json_str)
-        cred = credentials.Certificate(cred_obj)
-        firebase_admin.initialize_app(cred)
-        print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
+        cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
+        
+        if cred_json_str:
+            print("偵測到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
+            cred_obj = json.loads(cred_json_str)
+            cred = credentials.Certificate(cred_obj)
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
+        else:
+            print("未找到 FIREBASE_ADMIN_CREDENTIALS，嘗試使用 ApplicationDefault。")
+            cred = credentials.ApplicationDefault()
+            firebase_admin.initialize_app(cred)
+            print("✅ Firebase 已成功初始化 (模式: 應用預設憑證)")
+
         db = firestore.client()
+        print("✅ Firestore 客戶端已成功建立。")
     except Exception as e:
         print(f"❌ Firebase 初始化失敗: {e}")
         db = None
-        # 如果初始化失敗，我們不直接拋出錯誤，讓程式繼續運行以便偵錯
-else:
-    print("警告: 找不到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
-    db = None
+        raise e # 在這裡拋出錯誤，讓 main.py 的 try-except 區塊捕捉
 
 def get_user_profile(user_id):
     """從 Firestore 或快取中獲取使用者資料"""
