@@ -5,8 +5,7 @@ import os
 import flask
 import threading
 
-# 匯入您的其他模組
-from slash.info import info_group
+# 匯入你的其他模組
 from chat.gemini_api import setup_gemini_api
 from database import get_user_profile, update_user_profile, initialize_database
 
@@ -25,8 +24,31 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 app = flask.Flask(__name__)
 
-# 傳統指令
-# 這裡使用 commands.Context 類型提示
+# ===== 斜線指令群組定義 (直接放在這裡，確保沒有匯入問題) =====
+# 創建一個新的斜線指令群組來處理 /info
+info_group = app_commands.Group(name="info", description="查詢各種遊戲資訊")
+
+@info_group.command(name="boss", description="查詢 Boss 的資料")
+async def info_boss(interaction: discord.Interaction):
+    """
+    查詢 Boss 的資料
+    Args:
+        interaction: 互動物件
+    """
+    try:
+        await interaction.response.send_message("你成功執行了 /info boss 指令！")
+        print("✅ /info boss 指令已成功執行")
+
+    except Exception as e:
+        await interaction.response.send_message(f"❌ 查詢 Boss 資料時發生錯誤: {e}")
+        print(f"查詢 Boss 資料時發生錯誤: {e}")
+        
+# 將 group 加入 bot.tree
+# bot.tree.add_command(info_group)
+# ===== 斜線指令群組定義結束 =====
+
+
+# ===== 傳統指令定義 =====
 @bot.command(name="set_role")
 async def set_role_legacy(ctx: commands.Context, *, new_role: str):
     """
@@ -45,8 +67,7 @@ async def set_role_legacy(ctx: commands.Context, *, new_role: str):
         await ctx.send(f"❌ 發生錯誤: {e}")
         print(f"傳統指令 set_role 執行失敗: {e}")
 
-# 斜線指令
-# 這裡使用 discord.Interaction 類型提示
+# ===== 斜線指令定義 =====
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
@@ -65,6 +86,7 @@ async def slash_set_role(interaction: discord.Interaction, new_role: str):
     except Exception as e:
         await interaction.response.send_message(f"❌ 發生錯誤: {e}")
         print(f"斜線指令 set_role 執行失敗: {e}")
+
 
 @app.route("/", methods=["GET"])
 def health_check():
@@ -97,7 +119,9 @@ threading.Thread(target=start_bot_thread, daemon=True).start()
 async def on_ready():
     print(f"✅ 目前登入身份 --> {bot.user}")
     try:
+        # 將 info_group 添加到 bot.tree
         bot.tree.add_command(info_group)
+        # 進行同步
         slash = await bot.tree.sync()
         print(f"✅ 載入 {len(slash)} 個斜線指令")
     except Exception as e:
