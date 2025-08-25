@@ -6,16 +6,15 @@ import flask
 import threading
 
 # 匯入你的其他模組
+from slash.info import info_group
 from chat.gemini_api import setup_gemini_api
-from database import get_user_profile, update_user_profile, initialize_database
-from slash.info import info_group # 確保匯入 info_group
+from database import get_user_profile, update_user_profile
 
-# 使用你的變數名稱從環境變數中讀取金鑰
+# 從環境變數中讀取金鑰
 bot_token = os.getenv("DISCORD_BOT_TOKEN")
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not bot_token or not gemini_api_key:
-    # 這裡可以選擇不直接拋出錯誤，讓程式繼續運行，但會缺少功能
     print("警告: 找不到必要的環境變數，部分功能可能無法使用。")
 
 # 在這裡只定義 Bot 和 App，不做任何會失敗的操作
@@ -28,12 +27,6 @@ app = flask.Flask(__name__)
 # ===== 傳統指令定義 =====
 @bot.command(name="set_role")
 async def set_role_legacy(ctx: commands.Context, *, new_role: str):
-    """
-    設定你在機器人這裡扮演的角色
-    Args:
-        ctx: 指令的上下文
-        new_role: 使用者輸入的角色名稱
-    """
     try:
         user_id = ctx.author.id
         current_profile = get_user_profile(user_id)
@@ -48,12 +41,6 @@ async def set_role_legacy(ctx: commands.Context, *, new_role: str):
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
-    """
-    設定你在機器人這裡扮演的角色
-    Args:
-        interaction: 互動物件
-        new_role: 使用者輸入的角色名稱
-    """
     try:
         user_id = interaction.user.id
         current_profile = get_user_profile(user_id)
@@ -81,26 +68,17 @@ def health_check():
     """健康檢查端點"""
     return flask.jsonify({"status": "healthy"}), 200
 
-# 在主執行緒中啟動 Flask 伺服器，並在獨立執行緒中啟動機器人
 def main():
-    try:
-        # 在這裡呼叫所有初始化程式碼
-        initialize_database()
-        setup_gemini_api(bot, gemini_api_key)
-        print("✅ 所有服務初始化完成")
-    except Exception as e:
-        print(f"初始化服務失敗: {e}")
-        return
-
+    # 設置 Gemini API
+    setup_gemini_api(bot, gemini_api_key)
+    
     # 在一個獨立的執行緒中運行機器人
     bot_thread = threading.Thread(target=run_bot, daemon=True)
     bot_thread.start()
 
     # 在主執行緒中運行 Flask 伺服器來處理健康檢查
-    # 注意：在 Cloud Run 上，Flask 的 port 必須是 8080， host 必須是 '0.0.0.0'
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
-# 當檔案被載入時，呼叫 main 函數
 if __name__ == "__main__":
     main()
 

@@ -8,48 +8,27 @@ db = None
 user_cache = {}
 cache_lock = threading.Lock()
 
-def initialize_database():
-    global db
-    if firebase_admin._apps:
-        print("警告: Firebase 已初始化，跳過重新初始化。")
-        return
-    
+# 這裡我們將初始化邏輯放在頂層，以確保它在任何函式被呼叫前執行
+cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
+if cred_json_str:
     try:
-        # 嘗試從環境變數 FIREBASE_ADMIN_CREDENTIALS 載入憑證 (用於本地測試或特定部署)
-        cred_json_str = os.getenv("FIREBASE_ADMIN_CREDENTIALS")
-        
-        if cred_json_str:
-            print("偵測到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
-            cred_obj = json.loads(cred_json_str)
-            cred = credentials.Certificate(cred_obj)
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
-        else:
-            # 如果沒有找到，則嘗試使用 Cloud Run 預設的 ApplicationDefault 憑證
-            print("未找到 FIREBASE_ADMIN_CREDENTIALS，嘗試使用 ApplicationDefault。")
-            cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred)
-            print("✅ Firebase 已成功初始化 (模式: 應用預設憑證)")
-
-        # 嘗試建立 Firestore 客戶端
+        cred_obj = json.loads(cred_json_str)
+        cred = credentials.Certificate(cred_obj)
+        firebase_admin.initialize_app(cred)
+        print("✅ Firebase 已成功初始化 (模式: 服務帳號憑證)")
         db = firestore.client()
-        # 進行一次測試讀取，以確保連線成功
-        try:
-            db.collection("test_connection").document("test_doc").get()
-            print("✅ Firestore 客戶端已成功建立並通過連線測試。")
-        except Exception as conn_e:
-            print(f"❌ Firestore 客戶端連線測試失敗: {conn_e}")
-            db = None
-            
     except Exception as e:
         print(f"❌ Firebase 初始化失敗: {e}")
         db = None
+        # 如果初始化失敗，我們不直接拋出錯誤，讓程式繼續運行以便偵錯
+else:
+    print("警告: 找不到 FIREBASE_ADMIN_CREDENTIALS 環境變數。")
+    db = None
 
 def get_user_profile(user_id):
+    """從 Firestore 或快取中獲取使用者資料"""
     if db is None:
-        initialize_database()
-        if db is None:
-            raise Exception("資料庫未初始化，無法執行 get_user_profile。")
+        raise Exception("資料庫未初始化，無法執行 get_user_profile。")
 
     with cache_lock:
         if user_id in user_cache:
@@ -75,10 +54,9 @@ def get_user_profile(user_id):
         raise e
 
 def update_user_profile(user_id, profile_data):
+    """更新 Firestore 中的使用者資料，並同步更新快取"""
     if db is None:
-        initialize_database()
-        if db is None:
-            raise Exception("資料庫未初始化，無法執行 update_user_profile。")
+        raise Exception("資料庫未初始化，無法執行 update_user_profile。")
 
     doc_ref = db.collection('user_profiles').document(str(user_id))
     try:
