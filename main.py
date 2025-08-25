@@ -1,3 +1,4 @@
+# main.py
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -17,58 +18,39 @@ gemini_api_key = os.getenv("GEMINI_API_KEY")
 if not bot_token or not gemini_api_key:
     raise Exception("找不到必要的環境變數")
 
-# 在這裡呼叫初始化函式
-initialize_database()
-
+# 在這裡只定義 Bot 和 App，不做任何會失敗的操作
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# 這接收 HTTP 請求
 app = flask.Flask(__name__)
-
-setup_gemini_api(bot, gemini_api_key)
-
-# 協助處理設定角色和回應的輔助函式
-# 這個函式將重複的邏輯集中在一個地方
-async def _update_role_and_respond(user_id, new_role, responder):
-    """
-    Update the user's role and send a response.
-
-    Args:
-        user_id (int): The ID of the user.
-        new_role (str): The new role to set.
-        responder: The object to send the response (ctx or interaction).
-    """
-    try:
-        current_profile = get_user_profile(user_id)
-        current_profile['current_role'] = new_role
-        update_user_profile(user_id, current_profile)
-        message = f"✅ 你的角色已成功設定為：{new_role}"
-        if isinstance(responder, commands.Context):
-            await responder.send(message)
-        else: # discord.Interaction
-            await responder.response.send_message(message)
-    except Exception as e:
-        message = f"❌ 發生錯誤: {e}"
-        if isinstance(responder, commands.Context):
-            await responder.send(message)
-        else: # discord.Interaction
-            await responder.response.send_message(message)
-        print(f"指令 set_role 執行失敗: {e}")
 
 # 傳統指令
 @bot.command(name="set_role")
 async def set_role_legacy(ctx, *, new_role):
-    # 調用輔助函式來處理核心邏輯
-    await _update_role_and_respond(ctx.author.id, new_role, ctx)
+    try:
+        user_id = ctx.author.id
+        current_profile = get_user_profile(user_id)
+        current_profile['current_role'] = new_role
+        update_user_profile(user_id, current_profile)
+        await ctx.send(f"✅ 你的角色已成功設定為：{new_role}")
+    except Exception as e:
+        await ctx.send(f"❌ 發生錯誤: {e}")
+        print(f"傳統指令 set_role 執行失敗: {e}")
 
 # 斜線指令
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
-    # 調用輔助函式來處理核心邏輯
-    await _update_role_and_respond(interaction.user.id, new_role, interaction)
+    try:
+        user_id = interaction.user.id
+        current_profile = get_user_profile(user_id)
+        current_profile['current_role'] = new_role
+        update_user_profile(user_id, current_profile)
+        await interaction.response.send_message(f"✅ 你的角色已成功設定為：{new_role}")
+    except Exception as e:
+        await interaction.response.send_message(f"❌ 發生錯誤: {e}")
+        print(f"斜線指令 set_role 執行失敗: {e}")
 
 @app.route("/", methods=["GET"])
 def health_check():
@@ -76,17 +58,33 @@ def health_check():
     return flask.jsonify({"status": "healthy"}), 200
 
 # 這是讓機器人運作的關鍵
-@app.before_serving
-def start_bot():
-    def run_bot():
+def start_bot_thread():
+    # 在這裡呼叫所有初始化程式碼
+    try:
+        initialize_database()
+        setup_gemini_api(bot, gemini_api_key)
+        print("✅ 所有服務初始化完成")
+    except Exception as e:
+        print(f"初始化服務失敗: {e}")
+        # 如果初始化失敗，讓程式終止，Cloud Run 會重啟
+        return
+
+    # 在這個獨立的執行緒中運行機器人
+    try:
         bot.run(bot_token)
-    
-    threading.Thread(target=run_bot).start()
+    except Exception as e:
+        print(f"機器人啟動失敗: {e}")
+
+# 在檔案被載入時，直接啟動一個獨立的執行緒來運行機器人
+# 這個操作對 Gunicorn 來說是安全的，因為它不屬於任何請求
+threading.Thread(target=start_bot_thread, daemon=True).start()
+
 
 @bot.event
 async def on_ready():
     print(f"✅ 目前登入身份 --> {bot.user}")
     try:
+        # 你可以選擇在這裡同步指令，或者手動同步
         bot.tree.add_command(info_group)
         slash = await bot.tree.sync()
         print(f"✅ 載入 {len(slash)} 個斜線指令")
