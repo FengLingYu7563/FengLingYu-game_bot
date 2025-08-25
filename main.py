@@ -1,4 +1,3 @@
-# main.py
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -16,7 +15,8 @@ bot_token = os.getenv("DISCORD_BOT_TOKEN")
 gemini_api_key = os.getenv("GEMINI_API_KEY")
 
 if not bot_token or not gemini_api_key:
-    raise Exception("找不到必要的環境變數")
+    # 這裡可以選擇不直接拋出錯誤，讓程式繼續運行，但會缺少功能
+    print("警告: 找不到必要的環境變數，部分功能可能無法使用。")
 
 # 在這裡只定義 Bot 和 App，不做任何會失敗的操作
 intents = discord.Intents.default()
@@ -26,8 +26,15 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 app = flask.Flask(__name__)
 
 # 傳統指令
+# 這裡使用 commands.Context 類型提示
 @bot.command(name="set_role")
-async def set_role_legacy(ctx, *, new_role):
+async def set_role_legacy(ctx: commands.Context, *, new_role: str):
+    """
+    設定你在機器人這裡扮演的角色
+    Args:
+        ctx: 指令的上下文
+        new_role: 使用者輸入的角色名稱
+    """
     try:
         user_id = ctx.author.id
         current_profile = get_user_profile(user_id)
@@ -39,9 +46,16 @@ async def set_role_legacy(ctx, *, new_role):
         print(f"傳統指令 set_role 執行失敗: {e}")
 
 # 斜線指令
+# 這裡使用 discord.Interaction 類型提示
 @bot.tree.command(name="set_role", description="設定你在機器人這裡扮演的角色")
 @app_commands.describe(new_role="輸入你想要設定的角色")
 async def slash_set_role(interaction: discord.Interaction, new_role: str):
+    """
+    設定你在機器人這裡扮演的角色
+    Args:
+        interaction: 互動物件
+        new_role: 使用者輸入的角色名稱
+    """
     try:
         user_id = interaction.user.id
         current_profile = get_user_profile(user_id)
@@ -79,12 +93,10 @@ def start_bot_thread():
 # 這個操作對 Gunicorn 來說是安全的，因為它不屬於任何請求
 threading.Thread(target=start_bot_thread, daemon=True).start()
 
-
 @bot.event
 async def on_ready():
     print(f"✅ 目前登入身份 --> {bot.user}")
     try:
-        # 你可以選擇在這裡同步指令，或者手動同步
         bot.tree.add_command(info_group)
         slash = await bot.tree.sync()
         print(f"✅ 載入 {len(slash)} 個斜線指令")
